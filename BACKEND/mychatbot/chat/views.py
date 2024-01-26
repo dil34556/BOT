@@ -1,3 +1,62 @@
+
+import os
+from django.http import JsonResponse
+from django.views import View
+from langchain.agents import create_sql_agent
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
+from langchain.sql_database import SQLDatabase
+from langchain.llms.openai import OpenAI
+from langchain.agents.agent_types import AgentType
+from langchain_experimental.llm_symbolic_math.base import LLMSymbolicMathChain
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain_community.llms import HuggingFaceHub
+
+class MyChatBot(View):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.db_agent = None
+        self.llm_symbolic_math = None
+        self.huggingface_chain = None
+
+    def create_db_agent(self):
+        OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+        db = SQLDatabase.from_uri("postgresql://postgres:0987@localhost:5432/db")
+        llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
+        toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+        agent_type = AgentType.ZERO_SHOT_REACT_DESCRIPTION
+        verbose = True
+        self.db_agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=verbose, agent_type=agent_type)
+        self.llm_symbolic_math = LLMSymbolicMathChain.from_llm(llm)
+
+        repo_id = 'tiiuae/falcon-7b-instruct'
+        huggingface_hub_api_token = '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'
+        llm_huggingface = HuggingFaceHub(huggingfacehub_api_token=huggingface_hub_api_token, repo_id=repo_id, model_kwargs={'temperature': 0.7, 'max_new_token': 500})
+        template = """Questions: {questions}\nAnswer: let's give a detailed answer."""
+        prompt = PromptTemplate(template=template, input_variables=["questions"])
+        self.huggingface_chain = LLMChain(prompt=prompt, llm=llm_huggingface)
+
+    def get(self, request, *args, **kwargs):
+        user_message = request.GET.get('message', '')
+
+        if not self.db_agent or not self.huggingface_chain:
+            self.create_db_agent()
+
+        response_message = self.handle_user_message(user_message)
+        return JsonResponse({'message': response_message})
+
+    def handle_user_message(self, user_message):
+        math_keywords = ['solve', 'math', 'equation']
+        if any(math_keyword in user_message.lower() for math_keyword in math_keywords):
+            math_response = self.llm_symbolic_math.run(user_message)
+            return f"Here is the result of the query:\n{math_response}"
+        else:
+            huggingface_response = self.huggingface_chain.run(questions=user_message)
+            response = self.db_agent.run(user_message)
+            user_sentence = f"You asked: {user_message}"
+            response_with_user_sentence = f"{user_sentence}\nHuggingFace Response: {huggingface_response}\n{response}"
+
+            return response_with_user_sentence
 # # chat/views.py
 # from django.http import JsonResponse
 # import random
@@ -88,61 +147,3 @@
 # chat/views.py
 # chat/views.py
 # chat/views.py
-import os
-from django.http import JsonResponse
-from django.views import View
-from langchain.agents import create_sql_agent
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from langchain.sql_database import SQLDatabase
-from langchain.llms.openai import OpenAI
-from langchain.agents.agent_types import AgentType
-from langchain_experimental.llm_symbolic_math.base import LLMSymbolicMathChain
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain_community.llms import HuggingFaceHub
-
-class MyChatBot(View):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.db_agent = None
-        self.llm_symbolic_math = None
-        self.huggingface_chain = None
-
-    def create_db_agent(self):
-        OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-        db = SQLDatabase.from_uri("postgresql://postgres:0987@localhost:5432/db")
-        llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
-        toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-        agent_type = AgentType.ZERO_SHOT_REACT_DESCRIPTION
-        verbose = True
-        self.db_agent = create_sql_agent(llm=llm, toolkit=toolkit, verbose=verbose, agent_type=agent_type)
-        self.llm_symbolic_math = LLMSymbolicMathChain.from_llm(llm)
-
-        repo_id = 'tiiuae/falcon-7b-instruct'
-        huggingface_hub_api_token = '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'
-        llm_huggingface = HuggingFaceHub(huggingfacehub_api_token=huggingface_hub_api_token, repo_id=repo_id, model_kwargs={'temperature': 0.7, 'max_new_token': 500})
-        template = """Questions: {questions}\nAnswer: let's give a detailed answer."""
-        prompt = PromptTemplate(template=template, input_variables=["questions"])
-        self.huggingface_chain = LLMChain(prompt=prompt, llm=llm_huggingface)
-
-    def get(self, request, *args, **kwargs):
-        user_message = request.GET.get('message', '')
-
-        if not self.db_agent or not self.huggingface_chain:
-            self.create_db_agent()
-
-        response_message = self.handle_user_message(user_message)
-        return JsonResponse({'message': response_message})
-
-    def handle_user_message(self, user_message):
-        math_keywords = ['solve', 'math', 'equation']
-        if any(math_keyword in user_message.lower() for math_keyword in math_keywords):
-            math_response = self.llm_symbolic_math.run(user_message)
-            return f"Here is the result of the query:\n{math_response}"
-        else:
-            huggingface_response = self.huggingface_chain.run(questions=user_message)
-            response = self.db_agent.run(user_message)
-            user_sentence = f"You asked: {user_message}"
-            response_with_user_sentence = f"{user_sentence}\nHuggingFace Response: {huggingface_response}\n{response}"
-
-            return response_with_user_sentence
