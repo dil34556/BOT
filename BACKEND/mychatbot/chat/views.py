@@ -57,7 +57,7 @@ class MyChatBot(View):
             response_with_user_sentence = f"{user_sentence}\nHuggingFace Response: {huggingface_response}\n{response}"
 
             return response_with_user_sentence
-# # chat/views.py
+#  chat/views.py
 # from django.http import JsonResponse
 # import random
 # import os
