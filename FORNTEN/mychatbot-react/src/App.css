@@ -73,8 +73,10 @@
 }
 
 
+/* Add this to handle text overflow */
 .previous-chat {
-  margin-top: 20px;
+  overflow: auto;
+  max-height: 300px; /* Set a maximum height if needed */
 }
 
 .previous-chat h3 {

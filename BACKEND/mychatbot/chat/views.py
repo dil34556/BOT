@@ -32,7 +32,7 @@ class MyChatBot(View):
         repo_id = 'tiiuae/falcon-7b-instruct'
         huggingface_hub_api_token = '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'
         llm_huggingface = HuggingFaceHub(huggingfacehub_api_token=huggingface_hub_api_token, repo_id=repo_id, model_kwargs={'temperature': 0.7, 'max_new_token': 500})
-        template = """Questions: {questions}\nAnswer: let's give a detailed answer."""
+        template = """Questions: {questions}\nAnswer: give detailed answer."""
         prompt = PromptTemplate(template=template, input_variables=["questions"])
         self.huggingface_chain = LLMChain(prompt=prompt, llm=llm_huggingface)
 
@@ -46,17 +46,29 @@ class MyChatBot(View):
         return JsonResponse({'message': response_message})
 
     def handle_user_message(self, user_message):
+        keywords = ['show', 'create', 'plot', 'graph']
+        table_keywords = ['table', 'data', 'salary']
         math_keywords = ['solve', 'math', 'equation']
-        if any(math_keyword in user_message.lower() for math_keyword in math_keywords):
-            math_response = self.llm_symbolic_math.run(user_message)
-            return f"Here is the result of the query:\n{math_response}"
-        else:
+
+        if "chat" in user_message.lower():
+            # If user input contains "chat", use Hugging Face chain
             huggingface_response = self.huggingface_chain.run(questions=user_message)
+            return f"HuggingFace Response: {huggingface_response}"
+        elif any(keyword in user_message.lower() for keyword in keywords) and any(table_keyword in user_message.lower() for table_keyword in table_keywords):
+            table_name = next((table_keyword for table_keyword in table_keywords if table_keyword in user_message.lower()), None)
+            return f"Sure, I can help show the graphs for {table_name}! "
+        elif any(math_keyword in user_message.lower() for math_keyword in math_keywords):
+            # Run math-related query using llm_symbolic_math
+            math_response = self.llm_symbolic_math.run(user_message)
+            return f"Here is the result of the math-related query:\n{math_response}"
+        else:
             response = self.db_agent.run(user_message)
             user_sentence = f"You asked: {user_message}"
-            response_with_user_sentence = f"{user_sentence}\nHuggingFace Response: {huggingface_response}\n{response}"
+            response_with_user_sentence = f"{user_sentence}\n{response}"
 
             return response_with_user_sentence
+
+
 #  chat/views.py
 # from django.http import JsonResponse
 # import random
